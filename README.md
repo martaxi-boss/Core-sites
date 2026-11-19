@@ -22,18 +22,18 @@ O catálogo do Sevelora, os links manuais do Low Cost, credenciais privadas, bac
 
 ## Ficheiros
 
-- \`seo_growth_core.py\`: motor somente leitura em Python, sem bibliotecas externas.
-- \`sites.json\`: registo dos sites e respetivas configurações públicas.
-- \`tests/test_seo_growth_core.py\`: testes offline.
-- \`.github/workflows/seo-growth-core.yml\`: testes, execução diária e relatórios.
-- \`docs/ROADMAP.md\`: próximos passos para passar de auditoria a crescimento mensurável.
+- `seo_growth_core.py`: motor somente leitura em Python, sem bibliotecas externas.
+- `sites.json`: registo dos sites e respetivas configurações públicas.
+- `tests/test_seo_growth_core.py`: testes offline.
+- `.github/workflows/seo-growth-core.yml`: testes, execução diária e relatórios.
+- `docs/ROADMAP.md`: próximos passos para passar de auditoria a crescimento mensurável.
 
 ## Executar
 
-\`\`\`bash
+```bash
 python3 -m unittest discover -s tests -p 'test_seo_growth_core.py' -v
 python3 seo_growth_core.py --config sites.json --out reports --max-pages 20
-\`\`\`
+```
 
 O workflow automático do GitHub Actions não instala nada na VPS e usa o runner temporário do próprio GitHub.
 A cadência inicial é diária, 07:21 UTC. É possível iniciar uma auditoria manual em **Actions → SEO Growth Core → Run workflow**.
