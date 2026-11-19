@@ -1,16 +1,7 @@
-name: Core-sites - on-demand mobile performance sample
+name: Core-sites - Low Cost mobile performance pilot
 
 on:
   workflow_dispatch:
-    inputs:
-      site:
-        description: One authorized site to audit
-        required: true
-        default: sevelora
-        type: choice
-        options:
-          - sevelora
-          - lowcost-europa
 
 permissions:
   contents: read
@@ -30,16 +21,10 @@ jobs:
           command -v google-chrome
           mkdir -p "$RUNNER_TEMP/perf-core" reports
           npm install --prefix "$RUNNER_TEMP/perf-core" --no-save --no-package-lock --ignore-scripts --no-audit --no-fund lighthouse@13.6.0
-      - name: Sample one canonical homepage as mobile Lighthouse lab
-        env:
-          SITE_ID: ${{ inputs.site }}
+      - name: Sample Low Cost homepage as mobile Lighthouse lab
         run: |
           set -euo pipefail
-          case "$SITE_ID" in
-            sevelora) url="https://sevelora.eu/" ;;
-            lowcost-europa) url="https://www.lowcost-europa.eu/pt/" ;;
-            *) echo "::error::Unknown site"; exit 1 ;;
-          esac
+          url="https://www.lowcost-europa.eu/pt/"
           "$RUNNER_TEMP/perf-core/node_modules/.bin/lighthouse" "$url" \
             --form-factor=mobile \
             --only-categories=performance,seo,accessibility,best-practices \
