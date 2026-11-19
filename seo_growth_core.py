@@ -63,13 +63,14 @@ class SameHostRedirect(HTTPRedirectHandler):
 OPENER = build_opener(SameHostRedirect)
 
 
-def get(url: str) -> tuple[int, str, bytes, str]:
+def get(url: str) -> tuple[int, str, bytes, str, str]:
     req = Request(url, headers={"User-Agent": AGENT, "Accept": "text/html,application/xml,text/xml,text/plain"})
     with OPENER.open(req, timeout=TIMEOUT) as response:
         body = response.read(MAX_BYTES + 1)
         if len(body) > MAX_BYTES:
             raise ValueError("Response exceeds safe size cap")
-        return response.status, response.geturl(), body, response.headers.get("Content-Type", "")
+        return (response.status, response.geturl(), body, response.headers.get("Content-Type", ""),
+                ", ".join(response.headers.get_all("X-Robots-Tag", [])))
 
 
 def xml_locs(data: bytes) -> tuple[str, list[str]]:
@@ -96,7 +97,7 @@ def list_sitemap(sitemap: str, host: str) -> list[str]:
         if candidate in seen_sitemaps:
             continue
         seen_sitemaps.add(candidate)
-        _, target, body, _ = get(candidate)
+        _, target, body, _, _ = get(candidate)
         if safe_url(target, host) is None:
             raise ValueError("Cross-host sitemap redirect rejected")
         kind, found = xml_locs(body)
@@ -184,7 +185,7 @@ class PageParser(HTMLParser):
 
 def robot_policy(home: str, host: str) -> tuple[RobotFileParser | None, str | None]:
     try:
-        code, final, raw, _ = get(home.rstrip("/") + "/robots.txt")
+        code, final, raw, _, _ = get(home.rstrip("/") + "/robots.txt")
         if code != 200 or safe_url(final, host) is None:
             return None, "robots.txt unavailable"
         parser = RobotFileParser()
@@ -221,7 +222,7 @@ def audit(site: dict, page_cap_override: int | None = None, pause: float = 0.15)
             add(findings, "important", url, "robots.txt disallows this audit user-agent", "Verify intentional crawler exclusions")
             continue
         try:
-            status, final_url, html, content_type = get(url)
+            status, final_url, html, content_type, x_robots = get(url)
             if safe_url(final_url, host) is None:
                 add(findings, "critical", url, "Page redirects outside the canonical host", "Review the redirect and its canonical")
                 continue
@@ -236,7 +237,7 @@ def audit(site: dict, page_cap_override: int | None = None, pause: float = 0.15)
             rec = {
                 "url": url, "title": parser.title, "description": parser.description,
                 "canonical": parser.canonical, "h1": parser.h1,
-                "robots": parser.robots, "words": parser.word_count,
+                "robots": parser.robots + " " + x_robots, "words": parser.word_count,
                 "missing_image_alt": parser.missing_image_alt,
                 "structured_data": parser.structured_data,
                 "outbound_internal": sorted({s for href in parser.links if
