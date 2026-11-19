@@ -60,9 +60,9 @@ class SeoGrowthCoreTests(unittest.TestCase):
                     "<h1>Teste</h1><p>Descricao</p></html>").encode()
         def stub_get(url):
             if url == "https://example.com/":
-                return 200, url, home, "text/html"
+                return 200, url, home, "text/html", ""
             if url == "https://example.com/categoria/teste":
-                return 200, url, category, "text/html"
+                return 200, url, category, "text/html", ""
             raise AssertionError(url)
 
         class AllowRobots:
@@ -97,7 +97,7 @@ class SeoGrowthCoreTests(unittest.TestCase):
                     + " comparar equipamentos " * 420 + "</main></html>").encode()
         with patch.object(core, "list_sitemap", return_value=urls), \
              patch.object(core, "robot_policy", return_value=(Robots(), None)), \
-             patch.object(core, "get", side_effect=lambda url: (200, url, html_for(url), "text/html")):
+             patch.object(core, "get", side_effect=lambda url: (200, url, html_for(url), "text/html", "")):
             report = core.audit(site, pause=0)
         self.assertFalse(report["partial_scan"])
         self.assertEqual(report["pages_scanned"], 3)
@@ -118,7 +118,7 @@ class SeoGrowthCoreTests(unittest.TestCase):
                     f'<link rel="canonical" href="{url}"><h1>Produto</h1></html>').encode()
         with patch.object(core, "list_sitemap", return_value=urls), \
              patch.object(core, "robot_policy", return_value=(Robots(), None)), \
-             patch.object(core, "get", side_effect=lambda url: (200, url, html_for(url), "text/html")):
+             patch.object(core, "get", side_effect=lambda url: (200, url, html_for(url), "text/html", "")):
             report = core.audit(site, pause=0)
         self.assertTrue(report["partial_scan"])
         self.assertEqual(report["pages_scanned"], 2)
