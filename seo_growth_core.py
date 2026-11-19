@@ -111,6 +111,8 @@ def list_sitemap(sitemap: str, host: str) -> list[str]:
             elif url not in seen_pages:
                 pages.append(url)
                 seen_pages.add(url)
+    if pending:
+        raise ValueError("Sitemap index exceeds the eight-file audit limit; incomplete coverage must not be reported as complete")
     if not pages:
         raise ValueError("No same-host URLs found in the sitemap")
     return pages
@@ -218,6 +220,9 @@ def audit(site: dict, page_cap_override: int | None = None, pause: float = 0.15)
         if robots is None:
             # No unrestricted crawler behavior if robots policy cannot be checked.
             continue
+        if not robots.can_fetch("Googlebot", url):
+            add(findings, "critical", url, "Googlebot blocked by robots.txt",
+                "Confirm intended Google indexing and correct the Googlebot directive if accidental")
         if not robots.can_fetch(AGENT, url):
             add(findings, "important", url, "robots.txt disallows this audit user-agent", "Verify intentional crawler exclusions")
             continue
@@ -376,6 +381,8 @@ def main() -> int:
     failures = 0
     for site in sites["sites"]:
         name = site["id"]
+        if not isinstance(name, str) or not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,39}", name):
+            raise ValueError("Invalid site id: use only lowercase letters, numbers and hyphens")
         try:
             result = audit(site, args.max_pages, args.pause)
         except (ValueError, HTTPError, URLError, TimeoutError, ET.ParseError) as ex:
