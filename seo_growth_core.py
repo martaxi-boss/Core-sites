@@ -63,13 +63,14 @@ class SameHostRedirect(HTTPRedirectHandler):
 OPENER = build_opener(SameHostRedirect)
 
 
-def get(url: str) -> tuple[int, str, bytes, str]:
+def get(url: str) -> tuple[int, str, bytes, str, str]:
     req = Request(url, headers={"User-Agent": AGENT, "Accept": "text/html,application/xml,text/xml,text/plain"})
     with OPENER.open(req, timeout=TIMEOUT) as response:
         body = response.read(MAX_BYTES + 1)
         if len(body) > MAX_BYTES:
             raise ValueError("Response exceeds safe size cap")
-        return response.status, response.geturl(), body, response.headers.get("Content-Type", "")
+        return (response.status, response.geturl(), body, response.headers.get("Content-Type", ""),
+                ", ".join(response.headers.get_all("X-Robots-Tag", [])))
 
 
 def xml_locs(data: bytes) -> tuple[str, list[str]]:
@@ -96,7 +97,7 @@ def list_sitemap(sitemap: str, host: str) -> list[str]:
         if candidate in seen_sitemaps:
             continue
         seen_sitemaps.add(candidate)
-        _, target, body, _ = get(candidate)
+        _, target, body, _, _ = get(candidate)
         if safe_url(target, host) is None:
             raise ValueError("Cross-host sitemap redirect rejected")
         kind, found = xml_locs(body)
@@ -110,6 +111,8 @@ def list_sitemap(sitemap: str, host: str) -> list[str]:
             elif url not in seen_pages:
                 pages.append(url)
                 seen_pages.add(url)
+    if pending:
+        raise ValueError("Sitemap index exceeds the eight-file audit limit; incomplete coverage must not be reported as complete")
     if not pages:
         raise ValueError("No same-host URLs found in the sitemap")
     return pages
@@ -184,7 +187,7 @@ class PageParser(HTMLParser):
 
 def robot_policy(home: str, host: str) -> tuple[RobotFileParser | None, str | None]:
     try:
-        code, final, raw, _ = get(home.rstrip("/") + "/robots.txt")
+        code, final, raw, _, _ = get(home.rstrip("/") + "/robots.txt")
         if code != 200 or safe_url(final, host) is None:
             return None, "robots.txt unavailable"
         parser = RobotFileParser()
@@ -217,11 +220,14 @@ def audit(site: dict, page_cap_override: int | None = None, pause: float = 0.15)
         if robots is None:
             # No unrestricted crawler behavior if robots policy cannot be checked.
             continue
+        if not robots.can_fetch("Googlebot", url):
+            add(findings, "critical", url, "Googlebot blocked by robots.txt",
+                "Confirm intended Google indexing and correct the Googlebot directive if accidental")
         if not robots.can_fetch(AGENT, url):
             add(findings, "important", url, "robots.txt disallows this audit user-agent", "Verify intentional crawler exclusions")
             continue
         try:
-            status, final_url, html, content_type = get(url)
+            status, final_url, html, content_type, x_robots = get(url)
             if safe_url(final_url, host) is None:
                 add(findings, "critical", url, "Page redirects outside the canonical host", "Review the redirect and its canonical")
                 continue
@@ -236,7 +242,7 @@ def audit(site: dict, page_cap_override: int | None = None, pause: float = 0.15)
             rec = {
                 "url": url, "title": parser.title, "description": parser.description,
                 "canonical": parser.canonical, "h1": parser.h1,
-                "robots": parser.robots, "words": parser.word_count,
+                "robots": parser.robots + " " + x_robots, "words": parser.word_count,
                 "missing_image_alt": parser.missing_image_alt,
                 "structured_data": parser.structured_data,
                 "outbound_internal": sorted({s for href in parser.links if
@@ -287,14 +293,26 @@ def audit(site: dict, page_cap_override: int | None = None, pause: float = 0.15)
                 comparable(record["url"]) != comparable(home)):
             add(findings, "opportunity", record["url"], "No incoming links from scanned sitemap pages", "Add a relevant contextual internal link; validate against a full site crawl")
 
-    # Suggestions are based on observed public pages, not invented search volume.
+    # No blind article production: a commercial URL alone is NOT evidence of a gap.
+    # The thresholds below are screening heuristics, not Google ranking factors.
     candidate_paths = site.get("focus_path_contains", [])
     commercial = [r for r in records if any(p in urlsplit(r["url"]).path for p in candidate_paths)]
-    commercial.sort(key=lambda r: (inbound[r["url"]], r["words"]))
+    full_link_sample = len(pages) <= max_pages and len(records) == len(pages)
+    needs_review = [
+        r for r in commercial if r["words"] < 350
+        or (full_link_sample and inbound[r["url"]] == 0)
+    ]
+    # When demand data is unavailable, prefer Portuguese versions before ES.
+    def pilot_priority(record):
+        path = urlsplit(record["url"]).path
+        locale = 0 if path.startswith("/pt/") else (2 if path.startswith("/es/") else 1)
+        return (locale, inbound[record["url"]], record["words"], record["url"])
+    needs_review.sort(key=pilot_priority)
     ideas = [
         {"url": r["url"], "title": r["title"], "incoming_links": inbound[r["url"]],
-         "suggestion": "Review buyer-intent coverage and add original comparison/selection advice plus contextual internal links"}
-        for r in commercial[:5]
+         "suggestion": "Review thin visible content or missing internal links before proposing a new guide",
+         "evidence": "visible-text and/or internal-link screening heuristic; Google demand unverified"}
+        for r in needs_review[:5]
     ]
     findings.sort(key=lambda x: (SEVERITY[x["level"]], x["url"], x["problem"]))
     signals = [
@@ -307,7 +325,8 @@ def audit(site: dict, page_cap_override: int | None = None, pause: float = 0.15)
         "site": name, "home": home, "checked_at_utc": datetime.now(timezone.utc).isoformat(),
         "sitemap_urls": len(pages), "pages_scanned": len(records),
         "pages_skipped": min(len(pages), max_pages) - len(records),
-        "partial_scan": len(pages) > max_pages or robots is None,
+        "partial_scan": len(pages) > max_pages or robots is None or len(records) != len(pages),
+        "commercial_pages_scanned": len(commercial),
         "findings": findings, "growth_opportunities": ideas,
         "page_signals": signals,
         "limits": "Public on-page audit only: not Search Console index coverage, rankings, sales, or unique visitors.",
@@ -336,7 +355,7 @@ def markdown(report: dict) -> str:
         out.append(f"- [{idea['title'] or idea['url']}]({idea['url']}): {idea['suggestion']} "
                    f"(sampled inbound links: {idea['incoming_links']}).")
     if not report["growth_opportunities"]:
-        out.append("No matching commercial pages in the sampled sitemap pages.")
+        out.append("No obvious thin-content/internal-link gaps among sampled commercial pages. Demand evidence from Search Console is still needed; do not invent extra guides.")
     out.extend(["", "## Next autonomous phase", "",
         "1. Read real Google Search Console query/page data when a permitted read-only connector exists.",
         "2. Prepare targeted content/internal-link PRs for explicit review; never mass-publish unverified claims.",
@@ -362,6 +381,8 @@ def main() -> int:
     failures = 0
     for site in sites["sites"]:
         name = site["id"]
+        if not isinstance(name, str) or not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,39}", name):
+            raise ValueError("Invalid site id: use only lowercase letters, numbers and hyphens")
         try:
             result = audit(site, args.max_pages, args.pause)
         except (ValueError, HTTPError, URLError, TimeoutError, ET.ParseError) as ex:

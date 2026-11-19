@@ -96,19 +96,27 @@ def commercial_briefs(report: dict, site: dict, gsc_rows: list[GscRow] | None = 
     """Two bounded editorial brief suggestions per site, not invented articles."""
     pages = report.get("page_signals", [])
     by_url = {p["url"]: p for p in pages}
-    ideas = report.get("growth_opportunities", [])
+    ideas = list(report.get("growth_opportunities", []))
     gsc = page_opportunities(gsc_rows or [], set(by_url)) if gsc_rows is not None else []
     opportunity_by_page = {}
     for item in gsc:
         opportunity_by_page.setdefault(item["page"], item)
+        # Search-demand evidence can reveal an opportunity on an otherwise rich page.
+        # Without that data, the scanner must not invent missing buyer guides.
+        url = item["page"]
+        focus = site.get("focus_path_contains", ["/products/", "/categoria/"])
+        if (url in by_url and any(p in urlsplit(url).path for p in focus)
+                and not any(old.get("url") == url for old in ideas)):
+            ideas.append({"url": url, "title": by_url[url].get("title", ""),
+                          "incoming_links": by_url[url].get("incoming_links", 0)})
     def order(item):
         g = opportunity_by_page.get(item["url"])
         path = urlsplit(item["url"]).path
-        # Without genuine search-demand data, prioritize evergreen category guides
-        # instead of mass-generating thin product-specific pages.
-        category_first = 1 if site.get("id") == "sevelora" and path.startswith("/categoria/") else 2
-        return (0 if g else category_first, -(g["impressions"] if g else 0),
-                item.get("incoming_links", 0), item["url"])
+        # Avoid generating thin product text; prefer category pages and PT market.
+        category_first = 0 if site.get("id") == "sevelora" and path.startswith("/categoria/") else 1
+        locale = 0 if path.startswith("/pt/") else (2 if path.startswith("/es/") else 1)
+        return (0 if g else 1, -(g["impressions"] if g else 0),
+                category_first, locale, item.get("incoming_links", 0), item["url"])
     chosen = []
     for idea in sorted(ideas, key=order):
         page = by_url.get(idea.get("url"))

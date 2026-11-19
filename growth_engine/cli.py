@@ -9,6 +9,7 @@ from urllib.parse import urlsplit
 
 from .gsc import load_csv
 from .planner import markdown, plan
+from .privacy import redact_report
 
 
 def main() -> int:
@@ -40,11 +41,10 @@ def main() -> int:
                                              country_filter=site.get("gsc_country"))
         growth = plan(audit, site, rows, diagnostics)
         (out / (site["id"] + ".growth.json")).write_text(
-            json.dumps(growth, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            json.dumps(redact_report(growth), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         (out / (site["id"] + ".growth.md")).write_text(markdown(growth, public=True), encoding="utf-8")
         if rows is not None:
-            print(f"{site['id']}: GSC loaded privately, only redacted Markdown is safe to share")
-            print("NOTE: Private JSON contains GSC terms; never commit or upload it")
+            print(f"{site['id']}: GSC evaluated in memory; exported JSON and Markdown are redacted")
         else:
             print(f"{site['id']}: {len(growth['priority_queue'])} proposals, "
                   f"{len(growth['briefs'])} draft briefs (GSC not connected)")
