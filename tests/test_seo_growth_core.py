@@ -145,5 +145,26 @@ class SeoGrowthCoreTests(unittest.TestCase):
         ))
 
 
+    def test_robots_googlebot_blocked_even_when_own_agent_allowed(self):
+        site = {"id": "lowcost-europa", "home": "https://example.com",
+                "sitemap": "https://example.com/sitemap.xml",
+                "max_pages": 3, "focus_path_contains": ["/products/"]}
+        html = ('<html><title>Guia</title><meta name="description" content="Guia">'
+                '<link rel="canonical" href="https://example.com/">'
+                '<h1>Guia</h1></html>').encode()
+        class Robots:
+            def can_fetch(self, agent, url):
+                return agent != "Googlebot"
+        with patch.object(core, "list_sitemap", return_value=["https://example.com/"]), \
+             patch.object(core, "robot_policy", return_value=(Robots(), None)), \
+             patch.object(core, "get", return_value=(200, "https://example.com/", html, "text/html", "")):
+            report = core.audit(site, pause=0)
+        self.assertEqual(report["pages_scanned"], 1)
+        self.assertTrue(any(
+            f["level"] == "critical" and "Googlebot blocked" in f["problem"]
+            for f in report["findings"]
+        ))
+
+
 if __name__ == "__main__":
     unittest.main()
