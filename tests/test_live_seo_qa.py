@@ -52,8 +52,14 @@ class LiveAuditParserTests(unittest.TestCase):
 
     def test_language_wrong_detected(self):
         url = qa.BASE+"/es/products/hifu/"
-        self.assertIn("document_language_inconsistent_with_locale",
+        self.assertIn("document_language_inconsistent_with_explicit_locale",
                       qa.evaluate_public_page(url, page(url, "pt-pt"))["errors"])
+
+    def test_unprefixed_geo_english_is_warned_not_called_failing_locale(self):
+        url = qa.BASE + "/products/hifu/"
+        result = qa.evaluate_public_page(url, page(url, "en"))
+        self.assertEqual(result["errors"], [])
+        self.assertIn("unprefixed_geo_locale_not_pt_on_foreign_runner", result["warnings"])
 
     def test_jsonld_syntax_rejected(self):
         url = qa.BASE+"/pt/products/hifu/"
