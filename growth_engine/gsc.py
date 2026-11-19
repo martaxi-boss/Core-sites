@@ -61,6 +61,8 @@ def load_csv(path: Path, hostname: str, country_filter: str | None = None) -> tu
     missing = required.difference(header)
     if missing:
         raise ValueError("Joint page+query CSV required; missing: " + ", ".join(sorted(missing)))
+    if country_filter and "country" not in header:
+        raise ValueError("A country filter requires a Country column in the joint export")
     result: list[GscRow] = []
     dropped = 0
     for raw in reader:
@@ -79,7 +81,7 @@ def load_csv(path: Path, hostname: str, country_filter: str | None = None) -> tu
                 dropped += 1
                 continue
             country = fields.get("country") or None
-            if country_filter and country and country.casefold() not in {country_filter.casefold(), "portugal", "prt", "pt"}:
+            if country_filter and (not country or country.casefold() not in {country_filter.casefold(), "portugal", "prt", "pt"}):
                 dropped += 1
                 continue
             clicks_f, impressions_f = number(fields["clicks"]), number(fields["impressions"])
