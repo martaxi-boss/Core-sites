@@ -7,7 +7,7 @@ Only public same-host pages listed in each site's public sitemap are fetched.
 from __future__ import annotations
 
 import argparse
-from collections import Counter, defaultdict
+from collections import Counter
 from datetime import datetime, timezone
 from html.parser import HTMLParser
 import json
@@ -20,7 +20,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 from urllib.robotparser import RobotFileParser
 import xml.etree.ElementTree as ET
 
-AGENT = "SEO-Growth-Core/1.0 (read-only sitemap audit; repository martaxi-boss/VPS)"
+AGENT = "SEO-Growth-Core/1.0 (read-only sitemap audit; repository martaxi-boss/Core-sites)"
 MAX_BYTES = 2_000_000
 TIMEOUT = 12
 SEVERITY = {"critical": 0, "important": 1, "opportunity": 2}
