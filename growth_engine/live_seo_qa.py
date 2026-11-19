@@ -155,9 +155,18 @@ def evaluate_public_page(url: str, html: bytes, x_robots: str = "") -> dict:
             warnings.append("unexpected_hreflang_on_institutional_page")
 
     path = urlsplit(url).path
-    expected_locale = "es" if path.startswith("/es/") else "pt"
-    if not meta.html_lang.startswith(expected_locale):
-        errors.append("document_language_inconsistent_with_locale")
+    expected_locale = "es" if path.startswith("/es/") else (
+        "pt" if path.startswith("/pt/") else None
+    )
+    if expected_locale and not meta.html_lang.startswith(expected_locale):
+        errors.append("document_language_inconsistent_with_explicit_locale")
+    if not expected_locale:
+        # Unprefixed URLs intentionally geolocate by public IP. Do not call
+        # English from a foreign GitHub runner a broken Portuguese route.
+        if meta.html_lang not in ("pt-pt", "es", "en", "fr", "de"):
+            errors.append("unexpected_document_language_on_geo_localized_page")
+        elif meta.html_lang != "pt-pt":
+            warnings.append("unprefixed_geo_locale_not_pt_on_foreign_runner")
     if not meta.ld_blocks:
         warnings.append("no_jsonld_on_page")
     for raw in meta.ld_blocks:
