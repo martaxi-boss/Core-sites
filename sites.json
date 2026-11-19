@@ -5,14 +5,9 @@
       "home": "https://www.lowcost-europa.eu",
       "sitemap": "https://www.lowcost-europa.eu/sitemap.xml",
       "max_pages": 180,
-      "focus_path_contains": ["/products/"]
-    },
-    {
-      "id": "sevelora",
-      "home": "https://sevelora.eu",
-      "sitemap": "https://sevelora.eu/sitemap.xml",
-      "max_pages": 190,
-      "focus_path_contains": ["/categoria/", "/produto/"]
+      "focus_path_contains": [
+        "/products/"
+      ]
     }
   ]
 }

@@ -6,9 +6,11 @@ Core reutilizável para acompanhar e melhorar os sites de afiliação, sem proce
 
 **v2 (em validação):** motor de auditoria técnica e de oportunidades comerciais com prioridades P0/P1/P2, até dois briefings editoriais por site, análise de links internos e entrada opcional de dados reais do Search Console (CSV privado). Execução via GitHub Actions; apenas relatórios e propostas, sem alterar sites ou gerar visitas artificiais.
 
-Sites iniciais:
-- [Low Cost Europa](https://www.lowcost-europa.eu/) (Django; links de catálogo exclusivamente manuais).
-- [Sevelora](https://sevelora.eu/) (Next.js; feed Awin/Diversual independente).
+**Piloto ativo: apenas Low Cost Europa** (`https://www.lowcost-europa.eu/`).
+
+O Sevelora está **em espera** e não faz parte da configuração `sites.json` durante o piloto. Só volta a entrar após avaliação explícita dos resultados. O motor continua preparado para vários sites.
+
+O catálogo do Low Cost e os seus links manuais não são modificados.
 
 O catálogo do Sevelora, os links manuais do Low Cost, credenciais privadas, backups, GitHub de cada aplicação e a respetiva VPS permanecem intactos.
 
@@ -39,7 +41,7 @@ python3 seo_growth_core.py --config sites.json --out reports --max-pages 20
 python3 -m growth_engine.cli --config sites.json --audit-dir reports --out reports
 ```
 
-O workflow automático do GitHub Actions não instala nada na VPS e usa o runner temporário do próprio GitHub.
+O workflow automático do GitHub Actions para este piloto analisa só o Low Cost Europa e não instala nada na VPS e usa o runner temporário do próprio GitHub.
 A cadência inicial é diária, 07:21 UTC. É possível iniciar uma auditoria manual em **Actions → SEO Growth Core → Run workflow**.
 
 ## Limitações relevantes
