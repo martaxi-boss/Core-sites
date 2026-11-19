@@ -41,7 +41,7 @@ jobs:
           python seo_growth_core.py \
             --config sites.json \
             --out reports \
-            --max-pages 3 \
+            --max-pages 25 \
             --pause 0.25
       - name: Scan public canonical pages in two sites
         if: github.event_name != 'pull_request'
@@ -52,7 +52,7 @@ jobs:
             --pause 0.15
       - name: Generate bounded commercial briefs and prioritized actions
         run: |
-          python -m growth_engine.cli             --config sites.json             --audit-dir reports             --out reports
+          python -m growth_engine.cli --config sites.json --audit-dir reports --out reports
       - name: Archive read-only reports
         if: always()
         uses: actions/upload-artifact@v4
