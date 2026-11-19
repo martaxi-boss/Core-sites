@@ -95,8 +95,8 @@ class SeoGrowthCoreTests(unittest.TestCase):
                     f'<link rel="canonical" href="{url}"><h1>HIFU profissional</h1>'
                     f'<main>{links}<h2>Critérios de escolha</h2>'
                     + " comparar equipamentos " * 420 + "</main></html>").encode()
-        with patch.object(core, "list_sitemap", return_value=urls), \\
-             patch.object(core, "robot_policy", return_value=(Robots(), None)), \\
+        with patch.object(core, "list_sitemap", return_value=urls), \
+             patch.object(core, "robot_policy", return_value=(Robots(), None)), \
              patch.object(core, "get", side_effect=lambda url: (200, url, html_for(url), "text/html")):
             report = core.audit(site, pause=0)
         self.assertFalse(report["partial_scan"])
@@ -116,8 +116,8 @@ class SeoGrowthCoreTests(unittest.TestCase):
         def html_for(url):
             return (f'<html><title>Produto</title><meta name="description" content="teste">'
                     f'<link rel="canonical" href="{url}"><h1>Produto</h1></html>').encode()
-        with patch.object(core, "list_sitemap", return_value=urls), \\
-             patch.object(core, "robot_policy", return_value=(Robots(), None)), \\
+        with patch.object(core, "list_sitemap", return_value=urls), \
+             patch.object(core, "robot_policy", return_value=(Robots(), None)), \
              patch.object(core, "get", side_effect=lambda url: (200, url, html_for(url), "text/html")):
             report = core.audit(site, pause=0)
         self.assertTrue(report["partial_scan"])
