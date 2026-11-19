@@ -34,10 +34,18 @@ def suggest_internal_source(target: dict, pages: list[dict]) -> dict | None:
     target_url = target["url"]
     target_title = _tokenize(target.get("title", ""))
     target_path = urlsplit(target_url).path
+    def editorial_path(value: str) -> tuple[str, ...]:
+        segments = [x for x in urlsplit(value).path.split("/") if x]
+        if segments and segments[0] in ("pt", "es"):
+            segments = segments[1:]
+        return tuple(segments)
+    normalized_target = editorial_path(target_url)
     locale = "/es/" if target_path.startswith("/es/") else "/pt/" if target_path.startswith("/pt/") else None
     possibilities = []
     for p in pages:
-        if p["url"] == target_url or target_url in p.get("outbound_internal", []):
+        if (p["url"] == target_url or target_url in p.get("outbound_internal", [])
+                or (normalized_target and editorial_path(p["url"]) == normalized_target)):
+            # Never recommend linking alternate-locale or legacy paths of the same page.
             continue
         source_path = urlsplit(p["url"]).path
         if locale and source_path.startswith(("/pt/", "/es/")) and not source_path.startswith(locale):
@@ -95,7 +103,12 @@ def commercial_briefs(report: dict, site: dict, gsc_rows: list[GscRow] | None = 
         opportunity_by_page.setdefault(item["page"], item)
     def order(item):
         g = opportunity_by_page.get(item["url"])
-        return (0 if g else 1, -(g["impressions"] if g else 0), item.get("incoming_links", 0), item["url"])
+        path = urlsplit(item["url"]).path
+        # Without genuine search-demand data, prioritize evergreen category guides
+        # instead of mass-generating thin product-specific pages.
+        category_first = 1 if site.get("id") == "sevelora" and path.startswith("/categoria/") else 2
+        return (0 if g else category_first, -(g["impressions"] if g else 0),
+                item.get("incoming_links", 0), item["url"])
     chosen = []
     for idea in sorted(ideas, key=order):
         page = by_url.get(idea.get("url"))
