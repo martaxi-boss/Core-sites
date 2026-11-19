@@ -210,6 +210,7 @@ def audit(site: dict, page_cap_override: int | None = None, pause: float = 0.15)
     robots, robots_warning = robot_policy(home, host)
     records = []
     findings: list[dict] = []
+    failed_pages: set[str] = set()
     if robots_warning:
         add(findings, "important", home, robots_warning, "Inspect public robots.txt before relying on this scan")
     for url in pages[:max_pages]:
@@ -258,11 +259,14 @@ def audit(site: dict, page_cap_override: int | None = None, pause: float = 0.15)
             if rec["words"] < 100:
                 add(findings, "opportunity", url, "Low visible text volume (heuristic, not a ranking score)", "Check whether the page offers distinctive guidance for shoppers")
         except (HTTPError, URLError, TimeoutError, ValueError) as ex:
-            add(findings, "critical", url, f"Fetch failed ({type(ex).__name__})", "Verify live availability and server logs")
+            failed_pages.add(url)
+            detail = f"HTTP {ex.code}" if isinstance(ex, HTTPError) else f"Fetch failed ({type(ex).__name__})"
+            add(findings, "critical", url, detail, "Verify live availability, links and server logs")
         if pause > 0:
             time.sleep(pause)
 
     counts = Counter(record["title"].strip().casefold() for record in records if record["title"])
+    desc_counts = Counter(record["description"].strip().casefold() for record in records if record["description"])
     by_url = {record["url"]: record for record in records}
     inbound = Counter()
     for record in records:
@@ -272,8 +276,16 @@ def audit(site: dict, page_cap_override: int | None = None, pause: float = 0.15)
     for record in records:
         if record["title"] and counts[record["title"].strip().casefold()] > 1:
             add(findings, "important", record["url"], "Duplicate title among scanned pages", "Differentiate page title and search intent")
-        if inbound[record["url"]] == 0 and len(records) > 2 and comparable(record["url"]) != comparable(home):
-            add(findings, "opportunity", record["url"], "No incoming links from scanned sitemap pages", "Add a relevant contextual internal link; validate against complete crawl")
+        if record["description"] and desc_counts[record["description"].strip().casefold()] > 1:
+            add(findings, "important", record["url"], "Duplicate description among scanned pages", "Give the page an original description suited to its search intent")
+        for dest in record["outbound_internal"]:
+            if dest in failed_pages:
+                add(findings, "important", record["url"], "Links to a sitemap URL that failed the same scan", "Check the internal link and target page")
+        # Never infer orphans from a deliberately truncated sitemap sample.
+        if (len(pages) <= max_pages and len(records) == len(pages) and
+                inbound[record["url"]] == 0 and len(records) > 2 and
+                comparable(record["url"]) != comparable(home)):
+            add(findings, "opportunity", record["url"], "No incoming links from scanned sitemap pages", "Add a relevant contextual internal link; validate against a full site crawl")
 
     # Suggestions are based on observed public pages, not invented search volume.
     candidate_paths = site.get("focus_path_contains", [])
@@ -285,12 +297,19 @@ def audit(site: dict, page_cap_override: int | None = None, pause: float = 0.15)
         for r in commercial[:5]
     ]
     findings.sort(key=lambda x: (SEVERITY[x["level"]], x["url"], x["problem"]))
+    signals = [
+        {"url": r["url"], "title": r["title"], "words": r["words"],
+         "has_structured_data": r["structured_data"], "incoming_links": inbound[r["url"]],
+         "outbound_internal": r["outbound_internal"]}
+        for r in records
+    ]
     return {
         "site": name, "home": home, "checked_at_utc": datetime.now(timezone.utc).isoformat(),
         "sitemap_urls": len(pages), "pages_scanned": len(records),
         "pages_skipped": min(len(pages), max_pages) - len(records),
         "partial_scan": len(pages) > max_pages or robots is None,
         "findings": findings, "growth_opportunities": ideas,
+        "page_signals": signals,
         "limits": "Public on-page audit only: not Search Console index coverage, rankings, sales, or unique visitors.",
     }
 
@@ -353,7 +372,7 @@ def main() -> int:
                       "partial_scan": True, "findings": [{"level": "critical",
                       "url": site["home"], "problem": f"Site audit failed ({type(ex).__name__})",
                       "recommendation": "Check sitemap and hosting"}],
-                      "growth_opportunities": [],
+                      "growth_opportunities": [], "page_signals": [],
                       "limits": "Audit failed. This result says nothing about ranking or indexation."}
         (output_dir / f"{name}.json").write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         (output_dir / f"{name}.md").write_text(markdown(result), encoding="utf-8")
