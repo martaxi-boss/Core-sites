@@ -220,7 +220,7 @@ class PlannerTests(unittest.TestCase):
                 return True
         from unittest.mock import patch
         def fake_get(url):
-            return 200, url, pages_html.format(url).encode(), "text/html"
+            return 200, url, pages_html.format(url).encode(), "text/html", ""
         with patch.object(core, "list_sitemap", return_value=all_pages), \
              patch.object(core, "robot_policy", return_value=(Robots(), None)), \
              patch.object(core, "get", side_effect=fake_get):
