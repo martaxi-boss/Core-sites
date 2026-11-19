@@ -287,14 +287,26 @@ def audit(site: dict, page_cap_override: int | None = None, pause: float = 0.15)
                 comparable(record["url"]) != comparable(home)):
             add(findings, "opportunity", record["url"], "No incoming links from scanned sitemap pages", "Add a relevant contextual internal link; validate against a full site crawl")
 
-    # Suggestions are based on observed public pages, not invented search volume.
+    # No blind article production: a commercial URL alone is NOT evidence of a gap.
+    # The thresholds below are screening heuristics, not Google ranking factors.
     candidate_paths = site.get("focus_path_contains", [])
     commercial = [r for r in records if any(p in urlsplit(r["url"]).path for p in candidate_paths)]
-    commercial.sort(key=lambda r: (inbound[r["url"]], r["words"]))
+    full_link_sample = len(pages) <= max_pages and len(records) == len(pages)
+    needs_review = [
+        r for r in commercial if r["words"] < 350
+        or (full_link_sample and inbound[r["url"]] == 0)
+    ]
+    # When demand data is unavailable, prefer Portuguese versions before ES.
+    def pilot_priority(record):
+        path = urlsplit(record["url"]).path
+        locale = 0 if path.startswith("/pt/") else (2 if path.startswith("/es/") else 1)
+        return (locale, inbound[record["url"]], record["words"], record["url"])
+    needs_review.sort(key=pilot_priority)
     ideas = [
         {"url": r["url"], "title": r["title"], "incoming_links": inbound[r["url"]],
-         "suggestion": "Review buyer-intent coverage and add original comparison/selection advice plus contextual internal links"}
-        for r in commercial[:5]
+         "suggestion": "Review thin visible content or missing internal links before proposing a new guide",
+         "evidence": "visible-text and/or internal-link screening heuristic; Google demand unverified"}
+        for r in needs_review[:5]
     ]
     findings.sort(key=lambda x: (SEVERITY[x["level"]], x["url"], x["problem"]))
     signals = [
@@ -307,7 +319,8 @@ def audit(site: dict, page_cap_override: int | None = None, pause: float = 0.15)
         "site": name, "home": home, "checked_at_utc": datetime.now(timezone.utc).isoformat(),
         "sitemap_urls": len(pages), "pages_scanned": len(records),
         "pages_skipped": min(len(pages), max_pages) - len(records),
-        "partial_scan": len(pages) > max_pages or robots is None,
+        "partial_scan": len(pages) > max_pages or robots is None or len(records) != len(pages),
+        "commercial_pages_scanned": len(commercial),
         "findings": findings, "growth_opportunities": ideas,
         "page_signals": signals,
         "limits": "Public on-page audit only: not Search Console index coverage, rankings, sales, or unique visitors.",
@@ -336,7 +349,7 @@ def markdown(report: dict) -> str:
         out.append(f"- [{idea['title'] or idea['url']}]({idea['url']}): {idea['suggestion']} "
                    f"(sampled inbound links: {idea['incoming_links']}).")
     if not report["growth_opportunities"]:
-        out.append("No matching commercial pages in the sampled sitemap pages.")
+        out.append("No obvious thin-content/internal-link gaps among sampled commercial pages. Demand evidence from Search Console is still needed; do not invent extra guides.")
     out.extend(["", "## Next autonomous phase", "",
         "1. Read real Google Search Console query/page data when a permitted read-only connector exists.",
         "2. Prepare targeted content/internal-link PRs for explicit review; never mass-publish unverified claims.",
