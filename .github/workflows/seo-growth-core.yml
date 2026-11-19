@@ -8,6 +8,8 @@ on:
     branches: [main]
     paths:
       - 'sites.json'
+      - '.github/workflows/seo-growth-core.yml'
+      - 'growth_engine/seo_readiness.py'
   pull_request:
     branches: [main]
     paths:
@@ -54,6 +56,14 @@ jobs:
             --config sites.json \
             --out reports \
             --pause 0.15
+      - name: Verify public XML-TXT sitemap parity, robots and Googlebot
+        id: readiness
+        continue-on-error: true
+        run: |
+          python -m growth_engine.seo_readiness \
+            --config sites.json \
+            --audit-dir reports \
+            --out reports
       - name: Generate bounded commercial briefs and prioritized actions
         run: |
           python -m growth_engine.cli --config sites.json --audit-dir reports --out reports
@@ -84,9 +94,12 @@ jobs:
               }
               const title = 'SEO Growth Core - ' + site.id + ' (backlog)';
               const growthFile = 'reports/' + site.id + '.growth.md';
+              const readinessFile = 'reports/' + site.id + '.readiness.md';
               const audit = fs.readFileSync(filename,'utf8');
               const insights = fs.existsSync(growthFile) ? fs.readFileSync(growthFile,'utf8') : '';
-              const body = (audit + (insights ? '\n\n---\n\n' + insights : '')).slice(0,60000);
+              const readiness = fs.existsSync(readinessFile) ? fs.readFileSync(readinessFile,'utf8') : '';
+              const body = (audit + (readiness ? '\n\n---\n\n' + readiness : '')
+                + (insights ? '\n\n---\n\n' + insights : '')).slice(0,60000);
               const current = open.find(issue => !issue.pull_request && issue.title === title);
               if (current) {
                 await github.rest.issues.update({owner,repo,issue_number:current.number,body});
@@ -94,3 +107,8 @@ jobs:
                 await github.rest.issues.create({owner,repo,title,body});
               }
             }
+      - name: Report verified sitemap errors as failed run
+        if: steps.readiness.outcome == 'failure'
+        run: |
+          echo "::error::Live XML/TXT/robots public SEO readiness failed - inspect audit artifact and issue."
+          exit 1
