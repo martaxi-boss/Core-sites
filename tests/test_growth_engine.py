@@ -7,6 +7,7 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from growth_engine.gsc import GscRow, load_csv, page_opportunities
+from growth_engine.privacy import redact_report
 from growth_engine.planner import technical_queue, commercial_briefs, markdown, plan, suggest_internal_source
 import seo_growth_core as core
 
@@ -73,6 +74,30 @@ class GscTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Joint page"):
                 load_csv(path, "sevelora.eu")
 
+    def test_country_filter_rejects_csv_with_no_country_dimension(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "global.csv"
+            path.write_text(
+                "Page,Query,Clicks,Impressions,Position\\n"
+                "https://sevelora.eu/p,example,0,100,8\\n",
+                encoding="utf-8"
+            )
+            with self.assertRaisesRegex(ValueError, "Country column"):
+                load_csv(path, "sevelora.eu", country_filter="pt")
+
+    def test_country_filter_drops_empty_country(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "countries.csv"
+            path.write_text(
+                "Page,Query,Clicks,Impressions,Position,Country\\n"
+                "https://sevelora.eu/p,example,0,100,8,\\n"
+                "https://sevelora.eu/p,example2,0,100,8,prt\\n",
+                encoding="utf-8"
+            )
+            rows, info = load_csv(path, "sevelora.eu", country_filter="pt")
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(info["rows_rejected"], 1)
+
     def test_small_or_high_ctr_not_marked_as_growth_opportunity(self):
         rows = [
             GscRow("https://sevelora.eu/p", "tiny", 0, 5, 8),
@@ -110,6 +135,39 @@ class PlannerTests(unittest.TestCase):
         self.assertEqual(result["gsc"]["status"], "not_connected")
         self.assertEqual(result["guardrails"]["traffic_policy"], "no_synthetic_clicks_or_visitors")
         self.assertNotIn("Pesquisa observada:", markdown(result))
+
+    def test_public_json_redacts_gsc_query_and_metrics(self):
+        rows = [GscRow("https://sevelora.eu/categoria/anal", "privado-muito-identificavel", 0, 348, 9)]
+        result = plan(sample_report(), {"id": "sevelora"}, rows,
+                      {"rows_accepted": 1, "rows_rejected": 0})
+        raw = json.dumps(result, ensure_ascii=False)
+        self.assertIn("privado-muito-identificavel", raw)
+        clean = redact_report(result)
+        public = json.dumps(clean, ensure_ascii=False)
+        self.assertNotIn("privado-muito-identificavel", public)
+        self.assertNotIn("348 impressões", public)
+        self.assertEqual(clean["briefs"][0]["gsc_query"], None)
+        self.assertEqual(result["briefs"][0]["gsc_query"], "privado-muito-identificavel")
+        self.assertIn("omitidas", clean["briefs"][0]["why"])
+
+    def test_no_content_gaps_means_no_bogus_briefs(self):
+        report = sample_report()
+        report["growth_opportunities"] = []
+        for item in report["page_signals"]:
+            item["words"] = 1100
+            item["incoming_links"] = 5
+        self.assertEqual(commercial_briefs(report, {"id": "sevelora"}), [])
+
+    def test_gsc_demand_reveals_rich_page_opportunity(self):
+        report = sample_report()
+        report["growth_opportunities"] = []
+        for item in report["page_signals"]:
+            item["words"] = 1000
+            item["incoming_links"] = 5
+        rows = [GscRow("https://sevelora.eu/categoria/anal", "pesquisa reais testes", 0, 200, 9)]
+        briefs = commercial_briefs(report, {"id": "sevelora", "focus_path_contains": ["/categoria/"]}, rows)
+        self.assertEqual(len(briefs), 1)
+        self.assertEqual(briefs[0]["gsc_query"], "pesquisa reais testes")
 
     def test_categories_first_without_real_search_demand(self):
         report = sample_report()
