@@ -67,6 +67,12 @@ jobs:
       - name: Generate bounded commercial briefs and prioritized actions
         run: |
           python -m growth_engine.cli --config sites.json --audit-dir reports --out reports
+      - name: Extended LIVE indexability and hreflang audit - pilot PR only
+        if: github.event_name == 'pull_request'
+        run: |
+          python -m growth_engine.live_seo_qa \
+            --config sites.json \
+            --out reports
       - name: Archive read-only reports
         if: always()
         uses: actions/upload-artifact@v4
