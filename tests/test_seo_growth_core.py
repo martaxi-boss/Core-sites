@@ -79,5 +79,51 @@ class SeoGrowthCoreTests(unittest.TestCase):
         self.assertIn("does not generate fake users", core.markdown(report))
 
 
+    def test_rich_commercial_pages_are_not_flagged_for_more_guides(self):
+        site = {"id": "lowcost-europa", "home": "https://example.com",
+                "sitemap": "https://example.com/sitemap.xml",
+                "max_pages": 10, "focus_path_contains": ["/products/"]}
+        urls = ["https://example.com/", "https://example.com/products/hifu/",
+                "https://example.com/pt/products/hifu/"]
+        class Robots:
+            def can_fetch(self, user_agent, url):
+                return True
+        def html_for(url):
+            links = "".join(f'<a href="{p}">Produto</a>' for p in urls[1:])
+            return (f'<html><title>HIFU profissional</title>'
+                    f'<meta name="description" content="Como escolher produtos HIFU">'
+                    f'<link rel="canonical" href="{url}"><h1>HIFU profissional</h1>'
+                    f'<main>{links}<h2>Critérios de escolha</h2>'
+                    + " comparar equipamentos " * 420 + "</main></html>").encode()
+        with patch.object(core, "list_sitemap", return_value=urls), \\
+             patch.object(core, "robot_policy", return_value=(Robots(), None)), \\
+             patch.object(core, "get", side_effect=lambda url: (200, url, html_for(url), "text/html")):
+            report = core.audit(site, pause=0)
+        self.assertFalse(report["partial_scan"])
+        self.assertEqual(report["pages_scanned"], 3)
+        self.assertEqual(report["commercial_pages_scanned"], 2)
+        self.assertEqual(report["growth_opportunities"], [])
+
+    def test_blocked_sitemap_page_marks_scan_partial(self):
+        site = {"id": "lowcost-europa", "home": "https://example.com",
+                "sitemap": "https://example.com/sitemap.xml",
+                "max_pages": 10, "focus_path_contains": ["/products/"]}
+        urls = ["https://example.com/", "https://example.com/pt/",
+                "https://example.com/products/hifu/"]
+        class Robots:
+            def can_fetch(self, agent, url):
+                return "/products/" not in url
+        def html_for(url):
+            return (f'<html><title>Produto</title><meta name="description" content="teste">'
+                    f'<link rel="canonical" href="{url}"><h1>Produto</h1></html>').encode()
+        with patch.object(core, "list_sitemap", return_value=urls), \\
+             patch.object(core, "robot_policy", return_value=(Robots(), None)), \\
+             patch.object(core, "get", side_effect=lambda url: (200, url, html_for(url), "text/html")):
+            report = core.audit(site, pause=0)
+        self.assertTrue(report["partial_scan"])
+        self.assertEqual(report["pages_scanned"], 2)
+        self.assertEqual(report["pages_skipped"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()
