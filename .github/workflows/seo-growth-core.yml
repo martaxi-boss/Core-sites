@@ -1,4 +1,4 @@
-name: SEO Growth Core - multi-site organic opportunity backlog
+name: SEO Growth Core - Low Cost Europa pilot
 
 on:
   workflow_dispatch:
@@ -43,7 +43,7 @@ jobs:
             --out reports \
             --max-pages 25 \
             --pause 0.25
-      - name: Scan public canonical pages in two sites
+      - name: Scan Low Cost Europa canonical pages only
         if: github.event_name != 'pull_request'
         run: |
           python seo_growth_core.py \
