@@ -93,6 +93,37 @@ def expected_hreflang(url: str) -> dict[str, str]:
     }
 
 
+def googlebot_rule_for_this_site(robots_text: str, path: str) -> bool:
+    """Apply Google's longest-matching path rule to this site's simple robots file.
+
+    Fail closed on patterns or multiple user-agent groups rather than guessing.
+    Python urllib.robotparser returns the *first* path match, unlike Google.
+    """
+    rules = []
+    agents = []
+    for line in robots_text.splitlines():
+        line = line.split("#", 1)[0].strip()
+        if not line or ":" not in line:
+            continue
+        key, value = (part.strip() for part in line.split(":", 1))
+        key = key.casefold()
+        if key == "user-agent":
+            agents.append(value.casefold())
+        if key in ("allow", "disallow"):
+            if "*" in value or "$" in value:
+                raise ValueError("Unexpected robots wildcard; requires a full RFC-compliant evaluator")
+            if value:
+                rules.append((key, value))
+    if agents != ["*"]:
+        raise ValueError("Unexpected robots user-agent groups; cannot infer Googlebot policy")
+    matches = [(len(value), 1 if key == "allow" else 0)
+               for key, value in rules if path.startswith(value)]
+    if not matches:
+        return True
+    length, is_allow = max(matches)
+    return bool(is_allow)
+
+
 def evaluate_public_page(url: str, html: bytes, x_robots: str = "") -> dict:
     meta = Metadata()
     meta.feed(html.decode("utf-8", errors="replace"))
@@ -175,14 +206,16 @@ def perform(site: dict, pause: float = 0.20) -> dict:
     status, final, raw, _, _ = core.get(BASE + "/robots.txt")
     if status != 200 or final != BASE + "/robots.txt":
         raise ValueError("Unexpected public robots.txt response")
-    robots = RobotFileParser()
-    robots.parse(raw.decode("utf-8", errors="replace").splitlines())
+    robots_text = raw.decode("utf-8", errors="replace")
+    # Our site has only the simple global '*' group. Prefer Google's longest-rule
+    # precedence; Python's RobotFileParser incorrectly treats Allow:/ as first-match.
+    googlebot_rule_for_this_site(robots_text, "/")
 
     public = []
     errors = []
     warnings = []
     for url in sitemap:
-        if not robots.can_fetch("Googlebot", url) or not robots.can_fetch(core.AGENT, url):
+        if not googlebot_rule_for_this_site(robots_text, urlsplit(url).path):
             errors.append({"url": url, "problem": "public_sitemap_url_robots_disallow"})
             continue
         try:
@@ -204,14 +237,14 @@ def perform(site: dict, pause: float = 0.20) -> dict:
 
     private = []
     for path in EXPECTED_EXCLUSIONS:
-        allowed = robots.can_fetch("Googlebot", BASE + path + "seo-read-only-nonexistent")
+        allowed = googlebot_rule_for_this_site(robots_text, path + "seo-read-only-nonexistent")
         private.append({"path": path, "googlebot_disallowed": not allowed})
         if allowed:
             errors.append({"url": BASE + path, "problem": "intended_private_area_not_blocked_in_robots"})
 
     googlebot = []
     for path in GOOGLEBOT_SAMPLES:
-        if not robots.can_fetch("Googlebot", BASE + path):
+        if not googlebot_rule_for_this_site(robots_text, path):
             continue
         result = googlebot_sample(path)
         googlebot.append(result)
