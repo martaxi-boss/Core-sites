@@ -65,3 +65,5 @@ Low Cost Europa already has weekly production mobile Lighthouse and a working
 sitemap/IndexNow arrangement. Sevelora already has QA for sitemap, robots, canonical
 and live layout. This core complements them by analyzing site-wide opportunity
 coverage, rather than replacing or restarting their established workflows.
+
+<!-- one-time CI smoke-check branch; this change does not belong in main -->
