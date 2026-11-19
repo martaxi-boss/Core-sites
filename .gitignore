@@ -1,0 +1,11 @@
+# Local SEO audit outputs and private Search Console exports
+reports/
+gsc-private/
+private/
+*.gsc.csv
+__pycache__/
+*.py[cod]
+.venv/
+.env
+.env.*
+!.env.example

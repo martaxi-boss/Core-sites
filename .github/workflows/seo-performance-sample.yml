@@ -1,0 +1,75 @@
+name: Core-sites - on-demand mobile performance sample
+
+on:
+  workflow_dispatch:
+    inputs:
+      site:
+        description: One authorized site to audit
+        required: true
+        default: sevelora
+        type: choice
+        options:
+          - sevelora
+          - lowcost-europa
+
+permissions:
+  contents: read
+
+concurrency:
+  group: core-sites-mobile-sample
+  cancel-in-progress: false
+
+jobs:
+  sample:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Use disposable runner dependencies only
+        run: |
+          set -euo pipefail
+          command -v google-chrome
+          mkdir -p "$RUNNER_TEMP/perf-core" reports
+          npm install --prefix "$RUNNER_TEMP/perf-core" --no-save --no-package-lock --ignore-scripts --no-audit --no-fund lighthouse@13.6.0
+      - name: Sample one canonical homepage as mobile Lighthouse lab
+        env:
+          SITE_ID: ${{ inputs.site }}
+        run: |
+          set -euo pipefail
+          case "$SITE_ID" in
+            sevelora) url="https://sevelora.eu/" ;;
+            lowcost-europa) url="https://www.lowcost-europa.eu/pt/" ;;
+            *) echo "::error::Unknown site"; exit 1 ;;
+          esac
+          "$RUNNER_TEMP/perf-core/node_modules/.bin/lighthouse" "$url" \
+            --form-factor=mobile \
+            --only-categories=performance,seo,accessibility,best-practices \
+            --chrome-flags="--headless --no-sandbox --disable-dev-shm-usage --disable-gpu" \
+            --max-wait-for-load=45000 \
+            --output=json --output-path="reports/lighthouse.json" --quiet
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          data=json.loads(Path('reports/lighthouse.json').read_text())
+          if data.get('runtimeError'):
+              raise SystemExit("Lighthouse failed: " + str(data['runtimeError']))
+          scores={}
+          for category in ('performance','seo','accessibility','best-practices'):
+              n=data.get('categories',{}).get(category,{}).get('score')
+              if not isinstance(n,(int,float)):
+                  raise SystemExit("Missing Lighthouse category: "+category)
+              scores[category]=round(n*100)
+          metrics={k: data.get('audits',{}).get(k,{}).get('numericValue')
+                   for k in ('largest-contentful-paint','cumulative-layout-shift','total-blocking-time')}
+          result={'url':data.get('finalUrl'), 'scores':scores, 'lab_metrics':metrics,
+                  'disclaimer':'Simulated mobile lab results; not field Core Web Vitals, ranking or conversions'}
+          Path('reports/summary.json').write_text(json.dumps(result,indent=2)+'\n')
+          print("MOBILE_PERF_SAMPLE="+json.dumps(result,ensure_ascii=False))
+          PY
+      - name: Preserve performance report for review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-sites-mobile-sample
+          path: reports/
+          if-no-files-found: warn
+          retention-days: 14
