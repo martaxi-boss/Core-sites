@@ -64,6 +64,20 @@ class LiveAuditParserTests(unittest.TestCase):
         url = qa.BASE+"/privacidade/"
         self.assertEqual(qa.evaluate_public_page(url, page(url), "")["errors"], [])
 
+    def test_google_specificity_overrides_first_match_allow(self):
+        robots = "User-agent: *\nAllow: /\nDisallow: /go/\n"
+        self.assertFalse(qa.googlebot_rule_for_this_site(robots, "/go/123"))
+        self.assertTrue(qa.googlebot_rule_for_this_site(robots, "/pt/products/hifu/"))
+
+    def test_google_tie_goes_to_allow(self):
+        robots = "User-agent: *\nDisallow: /private/\nAllow: /private/\n"
+        self.assertTrue(qa.googlebot_rule_for_this_site(robots, "/private/example"))
+
+    def test_multiple_agents_fail_closed(self):
+        robots = "User-agent: *\nAllow: /\nUser-agent: Googlebot\nDisallow: /\n"
+        with self.assertRaisesRegex(ValueError, "user-agent groups"):
+            qa.googlebot_rule_for_this_site(robots, "/pt/")
+
     def test_private_routes_are_never_fetched(self):
         sitemap = [qa.BASE+"/", qa.BASE+"/pt/", qa.BASE+"/es/"]
         robots = ("User-agent: *\nAllow: /\n" +
