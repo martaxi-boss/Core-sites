@@ -111,6 +111,35 @@ class PlannerTests(unittest.TestCase):
         self.assertEqual(result["guardrails"]["traffic_policy"], "no_synthetic_clicks_or_visitors")
         self.assertNotIn("Pesquisa observada:", markdown(result))
 
+    def test_categories_first_without_real_search_demand(self):
+        report = sample_report()
+        product = "https://sevelora.eu/produto/123"
+        report["page_signals"].append({
+            "url": product, "title": "Produto Sevelora X", "words": 12,
+            "outbound_internal": [], "incoming_links": 0
+        })
+        report["growth_opportunities"].insert(0, {
+            "url": product, "title": "Produto Sevelora X", "incoming_links": 0,
+            "suggestion": "review"
+        })
+        briefs = commercial_briefs(report, {"id": "sevelora"}, limit=2)
+        self.assertEqual(briefs[0]["url"], "https://sevelora.eu/categoria/anal")
+
+    def test_cannot_suggest_same_page_in_another_locale(self):
+        target = {
+            "url": "https://www.lowcost-europa.eu/products/hifu/",
+            "title": "HIFU profissional"
+        }
+        pages = [
+            target,
+            {"url": "https://www.lowcost-europa.eu/pt/products/hifu/",
+             "title": "HIFU profissional", "outbound_internal": []},
+            {"url": "https://www.lowcost-europa.eu/pt/",
+             "title": "HIFU equipamentos", "outbound_internal": []}
+        ]
+        suggestion = suggest_internal_source(target, pages)
+        self.assertEqual(suggestion["source"], "https://www.lowcost-europa.eu/pt/")
+
     def test_does_not_link_across_language_versions(self):
         target = {"url": "https://www.lowcost-europa.eu/pt/products/hifu/", "title": "HIFU profissional"}
         pages = [
