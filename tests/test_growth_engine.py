@@ -78,8 +78,8 @@ class GscTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / "global.csv"
             path.write_text(
-                "Page,Query,Clicks,Impressions,Position\\n"
-                "https://sevelora.eu/p,example,0,100,8\\n",
+                "Page,Query,Clicks,Impressions,Position\n"
+                "https://sevelora.eu/p,example,0,100,8\n",
                 encoding="utf-8"
             )
             with self.assertRaisesRegex(ValueError, "Country column"):
@@ -89,9 +89,9 @@ class GscTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / "countries.csv"
             path.write_text(
-                "Page,Query,Clicks,Impressions,Position,Country\\n"
-                "https://sevelora.eu/p,example,0,100,8,\\n"
-                "https://sevelora.eu/p,example2,0,100,8,prt\\n",
+                "Page,Query,Clicks,Impressions,Position,Country\n"
+                "https://sevelora.eu/p,example,0,100,8,\n"
+                "https://sevelora.eu/p,example2,0,100,8,prt\n",
                 encoding="utf-8"
             )
             rows, info = load_csv(path, "sevelora.eu", country_filter="pt")
